@@ -24,6 +24,16 @@ as GIL can become an issue when using threads in Python with CPU-bound tasks.
 """
 from concurrent.futures import ProcessPoolExecutor
 
+# ---------------------------------------------------------------- data locations
+# Externalised from hard-coded cluster paths so the dataset classes work anywhere.
+# Only HPADatasetMIL / HPADatasetDownsample read these; the class the paper trains with,
+# HPADatasetMIL_url, takes its paths as constructor arguments.
+PREPARED_TRAIN_DIR = os.environ.get("ISIGHT_PREPARED_TRAIN_DIR", "")
+PREPARED_TEST_DIR = os.environ.get("ISIGHT_PREPARED_TEST_DIR", "")
+# where the optional patching/mask debug figures are written
+DEBUG_FIG_DIR = os.environ.get("ISIGHT_DEBUG_FIG_DIR", "./debug_figs")
+
+
 class SeededSampler(Sampler):
     def __init__(self, dataset, shuffle, seed):
         self.dataset = dataset
@@ -272,9 +282,9 @@ class HPADatasetMIL(HPADatasetBase):
                 return None
         else:
             if self.data_split == "train":
-                datadir = "/project/zhihuanglab/zhi/HPA-VLM/20241013_prepare_HPA_100K_files/output"
+                datadir = PREPARED_TRAIN_DIR
             else:
-                datadir = "/project/zhihuanglab/zhi/HPA-VLM/20241013_prepare_HPA_100K_files/output_test"
+                datadir = PREPARED_TEST_DIR
             image = Image.open(os.path.join(datadir, f'{name.replace("/", "__")}.jpg'))
             with open(os.path.join(datadir, f'{name.replace("/", "__")}.json'), "r") as f:
                 custom_metadata = json.load(f)
@@ -326,7 +336,7 @@ class HPADatasetMIL(HPADatasetBase):
             plt.imshow(mask, cmap='gray')
             plt.title("Mask Visualization")
             plt.axis('off')
-            plt.savefig(f'/project/zhihuanglab/zhi/HPA-VLM/20240929_new_method/dataset/extracted_example_image_patches/{name}_mask.png')
+            plt.savefig(os.path.join(DEBUG_FIG_DIR, f'{name}_mask.png'))
             plt.close()
             
             fig, axs = plt.subplots(grid_size_y, grid_size_x, figsize=(20, 20))
@@ -364,7 +374,7 @@ class HPADatasetMIL(HPADatasetBase):
 
         if plot_figure:
             plt.tight_layout()
-            plt.savefig(f'/project/zhihuanglab/zhi/HPA-VLM/20240929_new_method/dataset/extracted_example_image_patches/{name}_patching.png')
+            plt.savefig(os.path.join(DEBUG_FIG_DIR, f'{name}_patching.png'))
             plt.close()
 
         return patches
@@ -433,9 +443,9 @@ class HPADatasetDownsample(HPADatasetBase):
             image, custom_metadata = self._load_image_and_metadata(name, tar_filename)
         else:
             if self.data_split == "train":
-                datadir = "/project/zhihuanglab/zhi/HPA-VLM/20241013_prepare_HPA_100K_files/output"
+                datadir = PREPARED_TRAIN_DIR
             else:
-                datadir = "/project/zhihuanglab/zhi/HPA-VLM/20241013_prepare_HPA_100K_files/output_test"
+                datadir = PREPARED_TEST_DIR
             image = Image.open(os.path.join(datadir, f'{name.replace("/", "__")}.jpg'))
             with open(os.path.join(datadir, f'{name.replace("/", "__")}.json'), "r") as f:
                 custom_metadata = json.load(f)

@@ -1,0 +1,44 @@
+cls43,head_idx,tissue,cell_type
+0,1,renal cancer,Tumor cells
+1,2,endometrial cancer,Tumor cells
+2,3,ovarian cancer,Tumor cells
+3,4,liver cancer,Tumor cells
+4,5,cervical cancer,Tumor cells
+5,6,melanoma,Tumor cells
+6,7,urothelial cancer,Tumor cells
+7,9,colorectal cancer,Tumor cells
+8,14,stomach cancer,Tumor cells
+9,15,prostate cancer,Tumor cells
+10,16,pancreatic cancer,Tumor cells
+11,17,head and neck cancer,Tumor cells
+12,19,thyroid cancer,Tumor cells
+13,20,stomach,Glandular cells
+14,21,endometrium,Cells in endometrial stroma
+15,22,salivary gland,Glandular cells
+16,23,oral mucosa,Squamous epithelial cells
+17,24,epididymis,Glandular cells
+18,25,prostate,Glandular cells
+19,26,esophagus,Squamous epithelial cells
+20,27,vagina,Squamous epithelial cells
+21,34,testis,Cells in seminiferous ducts
+22,37,kidney,Cells in glomeruli
+23,38,duodenum,Glandular cells
+24,39,urinary bladder,Urothelial cells
+25,41,cerebellum,Cells in granular layer
+26,43,appendix,Glandular cells
+27,44,fallopian tube,Glandular cells
+28,45,gallbladder,Glandular cells
+29,46,small intestine,Glandular cells
+30,47,seminal vesicle,Glandular cells
+31,49,thyroid gland,Glandular cells
+32,50,rectum,Glandular cells
+33,53,nasopharynx,Respiratory epithelial cells
+34,54,cervix,Glandular cells
+35,57,parathyroid gland,Glandular cells
+36,61,skin,Epidermal cells
+37,64,ovary,Ovarian stroma cells
+38,65,skin,Fibroblasts
+39,69,cervix,Squamous epithelial cells
+40,71,breast,Glandular cells
+41,72,colon,Glandular cells
+42,73,liver,Hepatocytes

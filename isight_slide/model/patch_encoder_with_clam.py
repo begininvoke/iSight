@@ -4,6 +4,10 @@ import torch.nn.functional as F
 from transformers import AutoModel, AutoModelForZeroShotImageClassification, AutoProcessor, AutoConfig
 import random
 
+# Probability of KEEPING the text branch for a given sample during training (text
+# dropout = 1 - this). 0.5 is the paper's setting.
+TEXT_KEEP_PROB = 0.5
+
 class SelfAttention(nn.Module):
     def __init__(self, L):
         super(SelfAttention, self).__init__()
@@ -124,7 +128,7 @@ class CLAM_ViT(nn.Module):
 
         # Load pre-trained ViT for patch feature extraction
         config = AutoConfig.from_pretrained(base_model_name)
-        self.patch_encoder = AutoModel.from_pretrained(base_model_name, config=config)
+        self.patch_encoder = AutoModel.from_pretrained(base_model_name, config=config, use_safetensors=True)
         self.patch_processor = AutoProcessor.from_pretrained(base_model_name)
         self.freeze_vit = freeze_vit
         self.config = training_config
@@ -251,26 +255,53 @@ class CLAM_ViT(nn.Module):
         A_raw = torch.cat(A_raw_list, dim=0)
         M = torch.stack(M_list) # 16 x 50 x 768
 
-        M_single_token = M[:, 0, :] # CLS token 16 x 768
-        M_single_token = torch.mean(M, dim=1) # Mean of all tokens 16 x 768
-        
+        # Mean over ALL tokens -- this is the "all-token" aggregation of the paper.
+        # The original code computed `M[:, 0, :]` (the CLS token) on the line above and then
+        # immediately overwrote it; the CLS line never affected anything and is removed so the
+        # code cannot be misread as CLS pooling.
+        M_single_token = torch.mean(M, dim=1)          # (B, D)
 
-        if phase == "train":
-            # Introduce a random ratio to toggle the addition of query_features
-            if random.random() < 0.5:  # 50% chance to add query_features
-                text_inputs = self.patch_processor.tokenizer(query_input, return_tensors="pt", padding=True, truncation=True, max_length=80)
-                text_inputs.to(self.device)
-                query_features = self.patch_encoder.get_text_features(**text_inputs) # N x 512
-                query_features = self.text_projection_to_visual_dim(query_features)
 
-                M_single_token = M_single_token + query_features
+        # `force_query` (default False) lets inference opt into the text branch, which the
+        # original code reaches only during training. Unset -> behaviour is bit-identical.
+        _force_q = getattr(self, "force_query", False)
+        if phase == "train" or _force_q:
+            text_inputs = self.patch_processor.tokenizer(
+                query_input, return_tensors="pt", padding=True, truncation=True, max_length=80)
+            text_inputs.to(self.device)
+            query_features = self.patch_encoder.get_text_features(**text_inputs)   # (B, 512)
+            query_features = self.text_projection_to_visual_dim(query_features)    # (B, D)
+
+            # TEXT DROPOUT, PER SAMPLE. The original drew ONE Bernoulli(0.5) for the whole
+            # batch (`if random.random() < 0.5`), so at batch_size > 1 the text branch was
+            # either on for everyone or off for everyone -- not a per-image dropout. At
+            # batch_size = 1, which is the shipped config and how the released checkpoint was
+            # trained, per-batch and per-sample are the same thing, so this is bit-identical
+            # for the published model. `force_query` keeps the branch on for every sample.
+            if _force_q:
+                keep = torch.ones(query_features.size(0), 1, device=query_features.device)
+            else:
+                keep = (torch.rand(query_features.size(0), 1,
+                                   device=query_features.device) < TEXT_KEEP_PROB).float()
+            M_single_token = M_single_token + keep * query_features
         
         if self.use_cell_type_embedding:
             cell_type_one_hot = cell_type_one_hot.to(self.device)
             # Use the linear projection instead of embedding
             cell_type_embed = self.cell_type_projection(cell_type_one_hot)
-            # Expand cell_type_embed to match the batch size and append it to each patch feature
-            cell_type_embed = cell_type_embed[ix].unsqueeze(0).expand(M.size(0), -1)
+            # BUG FIX. The original line was
+            #     cell_type_embed = cell_type_embed[ix].unsqueeze(0).expand(M.size(0), -1)
+            # where `ix` is the loop variable leaked from `for ix, patch_tensor in
+            # enumerate(patches)` above, so after that loop ix == len(patches) - 1. Every
+            # sample in the batch therefore received the LAST sample's cell-type embedding.
+            #
+            # It is silent at batch_size = 1 (ix == 0, which is that sample's own row), and
+            # batch_size = 1 is what config/config.ini ships and what the released checkpoint
+            # was trained with -- so this fix is bit-identical for the published model and
+            # only changes behaviour for batch_size > 1, where the original was wrong.
+            assert cell_type_embed.size(0) == M_single_token.size(0), (
+                f"cell_type_one_hot has {cell_type_embed.size(0)} rows but the batch has "
+                f"{M_single_token.size(0)}")
             M_single_token = M_single_token + cell_type_embed
         else:
             pass
@@ -318,7 +349,7 @@ class CLAM_ViT(nn.Module):
 # Add a function to create an optimizer with learning rate scheduler
 def create_optimizer_and_scheduler(model, lr=1e-4, weight_decay=1e-5):
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=500, verbose=True)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=500)
     return optimizer, scheduler
 
 def create_clam_vit(base_model_name, training_config, gate=True, size_arg="small", dropout=0.25, k_sample=8, n_classes=4, device="cuda",
