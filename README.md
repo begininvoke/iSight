@@ -22,7 +22,7 @@ A deep learning-based multi-task prediction system for automated analysis of imm
 | Resource | Link |
 |----------|------|
 | **Dataset** | [nirschl-lab/hpa10m](https://huggingface.co/datasets/nirschl-lab/hpa10m) |
-| **Model Checkpoint** | [nirschl-lab/iSight](https://huggingface.co/nirschl-lab/iSight) |
+| **Model Checkpoint** | [zhihuanglab/iSight-slide](https://huggingface.co/zhihuanglab/iSight-slide) |
 
 
 **Validation Dataset Location**: `validation_data/` directory also contains representative samples with corresponding metadata and segmentation masks.
