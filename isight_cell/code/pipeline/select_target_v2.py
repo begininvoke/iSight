@@ -32,7 +32,7 @@ BATCH = int(os.environ.get("BATCH", "1024"))
 N_SHARDS = int(os.environ.get("N_SHARDS", "1")); SHARD_ID = int(os.environ.get("SHARD_ID", "0"))
 SEED = 42
 
-# --- class table: key stored in each h5 -> head column (precomputed, not derived here) ---
+# --- class table: key stored in each h5 -> head column ---
 def _load_classes():
     import csv as _csv
     with open(CLASSES_43) as fh:
@@ -76,7 +76,7 @@ def build_v2():
     b = ck["model"]["head.b"].float().to(dev)   # (43,2)
     key2col = _load_classes()                    # {head_idx stored in the h5: 0..42}
     assert W.shape[0] == 43, f"expected 43 heads, checkpoint has {W.shape[0]}"
-    if "old_to_new" in ck:                       # older checkpoints carry the table inline
+    if "old_to_new" in ck:                       # checkpoints that carry the table inline
         inline = {int(k): int(v) for k, v in ck["old_to_new"].items()}
         assert inline == key2col, f"{CLASSES_43} disagrees with the mapping stored in {CKPT}"
     return model, W, b, key2col, dev

@@ -1,7 +1,7 @@
-"""Round-2 pseudo-label refinement: keep only cells whose R1 predicted intensity AGREES
-with the image-level true intensity label, then train Round-2 on those denoised cells.
+"""Step-2 pseudo-label refinement: keep only cells whose step-1 predicted intensity AGREES
+with the image-level true intensity label, then train step 2 on those denoised cells.
 
-E.g. a true-weak image has 2000 target cells, R1 predicted ~200 of them weak (rest negative/
+E.g. a true-weak image has 2000 target cells, step 1 predicted ~200 of them weak (rest negative/
 moderate); we keep ONLY those ~200 weak cells (the real weak signal) and drop the broadcast
 noise. Writes data/target_cells_refined/<flat>.h5 (compact: only agreeing crops + labels).
 

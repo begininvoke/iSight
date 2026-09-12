@@ -4,76 +4,8 @@ import torch.nn.functional as F
 from transformers import AutoModel, AutoModelForZeroShotImageClassification, AutoProcessor, AutoConfig
 import random
 
-# Probability of KEEPING the text branch for a given sample during training (text
-# dropout = 1 - this). 0.5 is the paper's setting.
+# Probability of keeping the text branch for a sample during training (text dropout = 1 - this).
 TEXT_KEEP_PROB = 0.5
-
-class SelfAttention(nn.Module):
-    def __init__(self, L):
-        super(SelfAttention, self).__init__()
-        self.query = nn.Linear(L, L)
-        self.key = nn.Linear(L, L)
-        self.value = nn.Linear(L, L)
-        self.scale = 1. / (L ** 0.5)
-
-    def forward(self, x):
-        q = self.query(x)
-        k = self.key(x)
-        v = self.value(x)
-        attn_weights = F.softmax(q @ k.transpose(-2, -1) * self.scale, dim=-1)
-        return attn_weights @ v
-
-# class Attn_Net_Gated(nn.Module):
-#     def __init__(self, L=1024, D=256, dropout=0.25, n_classes=1):
-#         super(Attn_Net_Gated, self).__init__()
-        
-#         # Self-attention layer for patch contextual awareness
-#         self.self_attention = SelfAttention(L)
-        
-#         # Attention branches with normalization
-#         self.attention_a = nn.Sequential(
-#             nn.Linear(L, D),
-#             nn.Tanh(),
-#             nn.LayerNorm(D)
-#         )
-#         self.attention_b = nn.Sequential(
-#             nn.Linear(L, D),
-#             nn.Sigmoid(),
-#             nn.LayerNorm(D)
-#         )
-        
-#         # Dynamic gating mechanism to adaptively weight attention branches
-#         self.dynamic_gate = nn.Linear(L, 2)  # Outputs weights for `attention_a` and `attention_b`
-
-#         if dropout:
-#             self.attention_a.add_module("Dropout", nn.Dropout(dropout))
-#             self.attention_b.add_module("Dropout", nn.Dropout(dropout))
-
-#         # Final attention scoring layer
-#         self.attention_c = nn.Linear(D, n_classes)
-        
-#         # Learnable scaling parameter for sharper attention scores
-#         self.temperature = nn.Parameter(torch.tensor(1.0))
-        
-#     def forward(self, x):
-#         # Apply self-attention for better patch-to-patch contextual understanding
-#         x = self.self_attention(x)
-        
-#         # Pass through attention branches
-#         a = self.attention_a(x)
-#         b = self.attention_b(x)
-        
-#         # Dynamic gating: learnable weights for combining `a` and `b`
-#         gate_weights = F.softmax(self.dynamic_gate(x), dim=-1)
-#         A = gate_weights[:, 0].unsqueeze(-1) * a + gate_weights[:, 1].unsqueeze(-1) * b
-        
-#         # Compute final attention score with residual connection and scaling
-#         A = self.attention_c(A)
-#         A = A / self.temperature  # Scaling
-#         A = A + x.mean(dim=-1, keepdim=True)  # Residual connection for stability
-        
-#         return A, x
-    
 
 class Attn_Net_Gated(nn.Module):
     def __init__(self, L=1024, D=256, dropout=0.25, n_classes=1):
@@ -194,16 +126,6 @@ class CLAM_ViT(nn.Module):
 
     def forward(self, patches, query_input, cell_type_one_hot, phase="test"):
 
-        # patch_features_list = []
-        # patch_counts = []
-        # for ix, patch_tensor in enumerate(patches):
-        #     # Extract patch features using ViT
-        #     patch_outputs = self.patch_encoder.vision_model(patch_tensor, output_hidden_states=True)
-        #     patch_tokens = patch_outputs.hidden_states[-1]  # Accessing the last layer's hidden states
-        #     patch_features = self.visual_token_projection(patch_tokens)
-        #     patch_features_list.append(patch_features)
-        #     patch_counts.append(patch_features.shape[0])
-        # # patch_features_list: [torch.Size([115, 50, 768]), torch.Size([111, 50, 768]), ..., torch.Size([104, 50, 768])] # N patches x N tokens x feature dim
 
         # Process patches in smaller chunks to save memory
         chunk_size = 32  # Adjust this value based on your GPU memory
@@ -255,15 +177,12 @@ class CLAM_ViT(nn.Module):
         A_raw = torch.cat(A_raw_list, dim=0)
         M = torch.stack(M_list) # 16 x 50 x 768
 
-        # Mean over ALL tokens -- this is the "all-token" aggregation of the paper.
-        # The original code computed `M[:, 0, :]` (the CLS token) on the line above and then
-        # immediately overwrote it; the CLS line never affected anything and is removed so the
-        # code cannot be misread as CLS pooling.
+        # All-token aggregation: mean over the token axis.
         M_single_token = torch.mean(M, dim=1)          # (B, D)
 
 
-        # `force_query` (default False) lets inference opt into the text branch, which the
-        # original code reaches only during training. Unset -> behaviour is bit-identical.
+        # The text (context) branch is used during training; `force_query` (default False)
+        # switches it on at inference as well.
         _force_q = getattr(self, "force_query", False)
         if phase == "train" or _force_q:
             text_inputs = self.patch_processor.tokenizer(
@@ -272,12 +191,8 @@ class CLAM_ViT(nn.Module):
             query_features = self.patch_encoder.get_text_features(**text_inputs)   # (B, 512)
             query_features = self.text_projection_to_visual_dim(query_features)    # (B, D)
 
-            # TEXT DROPOUT, PER SAMPLE. The original drew ONE Bernoulli(0.5) for the whole
-            # batch (`if random.random() < 0.5`), so at batch_size > 1 the text branch was
-            # either on for everyone or off for everyone -- not a per-image dropout. At
-            # batch_size = 1, which is the shipped config and how the released checkpoint was
-            # trained, per-batch and per-sample are the same thing, so this is bit-identical
-            # for the published model. `force_query` keeps the branch on for every sample.
+            # Text dropout, per sample: each image keeps its text features with probability
+            # TEXT_KEEP_PROB. `force_query` keeps the branch on for every sample.
             if _force_q:
                 keep = torch.ones(query_features.size(0), 1, device=query_features.device)
             else:
@@ -289,16 +204,7 @@ class CLAM_ViT(nn.Module):
             cell_type_one_hot = cell_type_one_hot.to(self.device)
             # Use the linear projection instead of embedding
             cell_type_embed = self.cell_type_projection(cell_type_one_hot)
-            # BUG FIX. The original line was
-            #     cell_type_embed = cell_type_embed[ix].unsqueeze(0).expand(M.size(0), -1)
-            # where `ix` is the loop variable leaked from `for ix, patch_tensor in
-            # enumerate(patches)` above, so after that loop ix == len(patches) - 1. Every
-            # sample in the batch therefore received the LAST sample's cell-type embedding.
-            #
-            # It is silent at batch_size = 1 (ix == 0, which is that sample's own row), and
-            # batch_size = 1 is what config/config.ini ships and what the released checkpoint
-            # was trained with -- so this fix is bit-identical for the published model and
-            # only changes behaviour for batch_size > 1, where the original was wrong.
+            # one embedding row per sample
             assert cell_type_embed.size(0) == M_single_token.size(0), (
                 f"cell_type_one_hot has {cell_type_embed.size(0)} rows but the batch has "
                 f"{M_single_token.size(0)}")

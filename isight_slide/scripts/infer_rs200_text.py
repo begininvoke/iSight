@@ -1,4 +1,4 @@
-"""Paper-1 model on the 200 reader-study images, with the text query optionally injected.
+"""iSight-slide on the 200 reader-study images, with the text query optionally injected.
 
 Same model/patching logic as infer_test2000.py: the text branch in forward() is gated on
 `phase == "train"`, so the published reader-study numbers never used the text at all.

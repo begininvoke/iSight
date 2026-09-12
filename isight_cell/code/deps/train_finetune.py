@@ -13,7 +13,7 @@ Eval (two methods, every epoch):
   cell-level (PRIMARY, model selection): per-cell macro-F1 on test_pure (pure >75%/none
              cells, clean labels). Best epoch chosen by cell-level avg F1 (int+loc)/2.
   image-level (secondary): aggregate cell preds -> image pred, macro-F1 on
-             test_orig (vs napa baseline), test_pure, test_mixed.
+             test_orig (vs the baseline), test_pure, test_mixed.
 
 Data: data/target_cells/*.h5 (per-img bag: crops+feats+attrs role/intensity/location/quantity).
 Outputs: runs/<mode>/{history.csv, best_model.pt, summary.json, *_preds.csv}.
@@ -28,17 +28,15 @@ from sklearn.metrics import f1_score, cohen_kappa_score
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-# ImageNet normalisation, UNI2-h input size and embedding width. Inlined here (they were
-# imported from a shared module that also pulls in the DINOv2 code, which this path never uses).
+# ImageNet normalisation, UNI2-h input size and embedding width.
 EMBED_DIM = 1536
 INPUT_SIZE = 224
 NORM_MEAN = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1)
 NORM_STD = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1)
 
 ISIGHT = Path(os.environ.get("ISIGHT_ROOT", ""))
-EXP = Path(os.environ.get("EXP_DIR", str(ISIGHT / "hnc_immune_markers")))
+EXP = Path(os.environ.get("EXP_DIR", str(ISIGHT)))
 TARGET = Path(os.environ.get("TARGET_OUT", EXP / "data/target_cells"))
-sys.path.insert(0, str(ISIGHT / "iSight_train_model/code"))
 
 INTENSITY = ["negative", "weak", "moderate", "strong"]
 LOCATION  = ["none", "nuclear", "cytoplasmic/membranous", "cytoplasmic/membranous,nuclear"]
@@ -109,7 +107,7 @@ def crop_collate(batch):
 
 
 def crops_to_input(crops_uint8, device, augment, m, s):
-    """uint8 (B,64,64,3 RGB; extraction does imread->BGR2RGB, verified pixel-exact 2026-09-05) -> normalized (B,3,224,224) on GPU."""
+    """uint8 (B,64,64,3 RGB; extraction does imread->BGR2RGB, verified pixel-exact against the crops) -> normalized (B,3,224,224) on GPU."""
     x = torch.from_numpy(crops_uint8).to(device, non_blocking=True).permute(0, 3, 1, 2).float().div_(255.0)
     x = F.interpolate(x, INPUT_SIZE, mode="bilinear", align_corners=False, antialias=True)
     if augment:

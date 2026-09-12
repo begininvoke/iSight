@@ -1,10 +1,8 @@
 # iSight: Towards expert-AI co-assessment for improved immunohistochemistry staining interpretation
 [![arXiv](https://img.shields.io/badge/arXiv-2602.04063-b31b1b.svg)](https://arxiv.org/abs/2602.04063)
 
-Code for **iSight-slide** (image-level IHC interpretation), **iSight-cell** (cell-level
-staining prediction) and the feature computation for the three clinical cohorts, plus the
-[pre-release code audit](docs/CODE_AUDIT.md) that records every change made against the code
-as it ran for the paper.
+Code for **iSight-slide** (image-level IHC interpretation) and **iSight-cell** (cell-level
+staining prediction).
 
 ## 📊 System overview
 
@@ -53,13 +51,7 @@ isight_cell/code/
   tissue.py                          tissue mask
 isight_cell/meta/classes_43.csv      the 43 target classes (tissue x cell-type)
 
-clinical_features/
-  upenn_melanoma/                    per-slide S100 cell features + survival
-  hancock/                           recurrence features, WSI tiling
-  nadt/                              marker features
-
 validation_data/                     2,000-image validation set (images, RLE masks, metadata)
-docs/CODE_AUDIT.md                   pre-release audit
 ```
 
 ## 🧠 Models
@@ -142,11 +134,7 @@ Data locations are environment variables, not hard-coded paths:
 | `ISIGHT_IMAGE_DIR` | images, only for the `simple_downsample` version |
 | `SCHEDULER_PER_EPOCH=1` | step the LR scheduler per epoch instead of per batch |
 
-**Note on `batch_size`.** The released configuration uses `batch_size = 1` and that is what
-the checkpoint was trained with. Two defects in the original code were invisible at that
-setting and wrong above it: the cell-type indexing and the per-batch text dropout
-([audit §1, §2](docs/CODE_AUDIT.md)). Both are fixed, but if you compare against the published
-checkpoint, use `batch_size = 1`.
+The released configuration uses `batch_size = 1`, which is what the checkpoint was trained with.
 
 ## ▶️ iSight-cell pipeline, in run order
 
@@ -178,15 +166,8 @@ per-image cell cap). Segmentation upstream of step 1 is Cellpose-SAM at its rele
 | model | config | note |
 |---|---|---|
 | iSight-slide | `isight_slide/config/config.ini` — `v3_all_tokens`, batch_size 1, lr 1e-6, 10 epochs | [zhihuanglab/iSight-slide](https://huggingface.co/zhihuanglab/iSight-slide) |
-| iSight-cell — staining | round3 resample, s1, lr 2e-5, **epoch 09** | early stopping on validation macro-F1 (min_delta 0.1%, patience 2, keep-current), [audit §8](docs/CODE_AUDIT.md) |
+| iSight-cell — staining | step 2 (balanced resampling), lr 2e-5, **epoch 9** | early stopping on validation macro-F1 (min_delta 0.1%, patience 2, keep-current) |
 | iSight-cell — target selection | 43 binary heads, `isight_cell/meta/classes_43.csv` | val mean F1 0.9954 (ep4); pass it as `CKPT` |
-
-## 🏥 Clinical cohorts
-
-`clinical_features/` computes the per-slide features and the survival/recurrence models for the
-three cohorts: `upenn_melanoma/` (`build_cell_melan.py` features, `upenn_km.py` and
-`upenn_cindex_heatmap.py` survival), `hancock/` (`deepzoom_tiler.py` tiling,
-`figure5_hancock.py` recurrence), `nadt/` (`figure5_nadt.py`).
 
 ## 📄 License
 

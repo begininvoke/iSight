@@ -1,15 +1,14 @@
 """Early stopping on a validation metric: min_delta / patience / keep-current.
 
-This is the rule declared for the released staining model (see docs/CODE_AUDIT.md §8):
+The rule used to select the released staining model:
 
     criterion   validation macro-F1  (mean of the per-cell intensity and location F1)
     min_delta   0.001   (0.1%)
     patience    2
     semantics   keep-current
 
-**keep-current** means the epoch that exhausts the patience budget is the selected model --
-not the best-so-far. This is Keras' `restore_best_weights=False` convention, and it is the
-convention the released checkpoint follows; `restore_best` would select a different epoch.
+**keep-current** means the epoch that exhausts the patience budget is the selected model,
+not the best-so-far (Keras' `restore_best_weights=False` convention).
 An epoch counts as an improvement only if it beats the running best by more than `min_delta`,
 so a marginal gain still increments the bad-epoch counter.
 """

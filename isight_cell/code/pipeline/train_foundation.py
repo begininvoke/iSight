@@ -1,7 +1,7 @@
 """Round-1 dual-head cell-level foundation training (STREAMING, DDP).
 
 Scale: ~118M target cells (1.4 TB crops) across 83,391 imgs -> cannot load to RAM like
-hnc_immune_markers/train_finetune.py. Instead stream per-image "bags": each train step
+deps/train_finetune.py. Instead stream per-image "bags": each train step
 reads one file's crops (sequential 24MB read, page-cache friendly: 1.4TB fits in 2TB RAM
 cache so epoch 2+ is ~in-RAM speed) and samples K random cells (weak image-level label
 broadcast to its cells).
@@ -104,7 +104,7 @@ class BagDS(Dataset):
     def __len__(self): return len(self.path)
     def __getitem__(self, i):
         # read a CONTIGUOUS random block of K cells (h5py reads only needed chunks ~1.5MB)
-        # instead of the whole 24MB file -> avoids filling SLURM cgroup page cache (OOM).
+        # instead of the whole 24MB file -> stays within the job's page-cache limit (OOM otherwise).
         with h5py.File(self.path[i], "r") as f:
             n = int(f.attrs["n_cells"])
             if self.K and n > self.K:

@@ -7,8 +7,7 @@ from pathlib import Path
 import numpy as np, pandas as pd, h5py, torch
 from sklearn.metrics import cohen_kappa_score, f1_score
 ISIGHT = Path(os.environ.get("ISIGHT_ROOT", ""))   # data root; see README
-for p in ("hnc_immune_markers/code","iSight_prostate_finetune/code","iSight_train_model/code"):
-    sys.path.insert(0, str(ISIGHT / p))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "deps"))  # train_finetune, backbones
 import train_finetune as T
 from backbones.vision_encoders.uni2 import build_uni2
 
@@ -17,7 +16,7 @@ TC = FINAL / "data/target_cells"
 CKPTDIR = Path(os.environ.get("CKPTDIR", FINAL / "runs/round3_resample_s1_lr2e5"))
 OUT = os.environ.get("OUT", str(FINAL / "runs/round3_resample_s1_lr2e5_valrich.csv"))
 EPS = os.environ["EPS"].split()
-IMAP=T.IMAP                    # use the exact TRAINING label maps (avoid 1<->2 loc swap bug)
+IMAP=T.IMAP                    # the training label maps
 LMAP=T.LMAP                    # 0=none 1=nuclear 2=cytoplasmic/membranous 3=cyto/mem+nuclear
 def qmap(s):
     s=str(s)

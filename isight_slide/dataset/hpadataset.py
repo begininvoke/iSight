@@ -25,9 +25,8 @@ as GIL can become an issue when using threads in Python with CPU-bound tasks.
 from concurrent.futures import ProcessPoolExecutor
 
 # ---------------------------------------------------------------- data locations
-# Externalised from hard-coded cluster paths so the dataset classes work anywhere.
-# Only HPADatasetMIL / HPADatasetDownsample read these; the class the paper trains with,
-# HPADatasetMIL_url, takes its paths as constructor arguments.
+# Only HPADatasetMIL / HPADatasetDownsample read these; HPADatasetMIL_url takes its paths
+# as constructor arguments.
 PREPARED_TRAIN_DIR = os.environ.get("ISIGHT_PREPARED_TRAIN_DIR", "")
 PREPARED_TEST_DIR = os.environ.get("ISIGHT_PREPARED_TEST_DIR", "")
 # where the optional patching/mask debug figures are written
@@ -90,8 +89,8 @@ class ResumableDistributedSampler(DistributedSampler):
 
 
 class HPADatasetBase(Dataset):
-    def __init__(self, hpa11m_data, datadir, data_split="train", processor=None, cache_dir=None, num_workers=4):
-        self.hpa11m_data = hpa11m_data
+    def __init__(self, hpa10m_data, datadir, data_split="train", processor=None, cache_dir=None, num_workers=4):
+        self.hpa10m_data = hpa10m_data
         self.datadir = datadir
         self.data_split = data_split
         self.processor = processor
@@ -119,7 +118,7 @@ class HPADatasetBase(Dataset):
             self.augmentations = None
 
     def __len__(self):
-        return len(self.hpa11m_data)
+        return len(self.hpa10m_data)
 
     def _load_image_and_metadata(self, name, tar_filename):
         if self.cache_dir:
@@ -190,15 +189,15 @@ class HPADatasetBase(Dataset):
         """
         # Note: This tissue list is based on:
         np.unique(
-                pd.Series(hpa11m_data["tissue"].unique()).str
+                pd.Series(hpa10m_data["tissue"].unique()).str
                     .replace("cancer", "")
                     .replace("tissue", "").str.strip()
             )
             
         It is worth noting that:
-        >>> hpa11m_data.loc[hpa11m_data["tissue"].isin(["pancreas"]), "tissue_folder"].unique()
+        >>> hpa10m_data.loc[hpa10m_data["tissue"].isin(["pancreas"]), "tissue_folder"].unique()
         array(['normal'], dtype=object)
-        >>> hpa11m_data.loc[hpa11m_data["tissue"].isin(["pancreatic cancer"]), "tissue_folder"].unique()
+        >>> hpa10m_data.loc[hpa10m_data["tissue"].isin(["pancreatic cancer"]), "tissue_folder"].unique()
         array(['cancer'], dtype=object)
         """
         tissue_list = ['adipose', 'adrenal gland', 'appendix', 'bone marrow', 'breast',
@@ -228,7 +227,7 @@ class HPADatasetBase(Dataset):
                             'Chondrocytes', 'Hepatocytes', 'Lymphoid tissue',
                             'Non-germinal center cells', 'Cells in molecular layer',
                             'Keratinocytes', 'Peripheral nerve', 'Cells in tubules',
-                            'Neuronal cells', 'Leydig cells', 'Cells in white pulp', 'Langerhans'] # Dec 4 -- added remaining cell types in hpa11m
+                            'Neuronal cells', 'Leydig cells', 'Cells in white pulp', 'Langerhans']
         # Process additional information
         tissue_name = annotation['tissue'].replace("cancer","").replace("tissue","").strip()
         snomed_text = annotation['snomed_text']
@@ -256,21 +255,21 @@ class HPADatasetBase(Dataset):
         return query_input, caption_output, snomed_text, snomed_code, image_url, staining_intensity, staining_location, staining_quantity, malignancy, tissue_one_hot, cell_type_one_hot
 
 class HPADatasetMIL(HPADatasetBase):
-    def __init__(self, hpa11m_data, datadir, data_split="train", patch_size=224, processor=None, cache_dir=None, num_workers=4):
-        super().__init__(hpa11m_data, datadir, data_split, processor, cache_dir, num_workers)
+    def __init__(self, hpa10m_data, datadir, data_split="train", patch_size=224, processor=None, cache_dir=None, num_workers=4):
+        super().__init__(hpa10m_data, datadir, data_split, processor, cache_dir, num_workers)
         self.patch_size = patch_size
 
     def __getitem__(self, idx):
-        name = self.hpa11m_data.loc[idx]["name"]
-        # tissue_folder = self.hpa11m_data.loc[idx]["tissue_folder"]
+        name = self.hpa10m_data.loc[idx]["name"]
+        # tissue_folder = self.hpa10m_data.loc[idx]["tissue_folder"]
         if name.startswith('tissue/'):
             tissue_folder = 'normal'
         elif name.startswith('pathology/'):
             tissue_folder = 'cancer'
         else:
-            tissue_folder = self.hpa11m_data.loc[idx]["tissue_folder"]
+            tissue_folder = self.hpa10m_data.loc[idx]["tissue_folder"]
             
-        tar_filename = os.path.join(self.datadir, self.hpa11m_data.loc[idx]["tar_filename"])
+        tar_filename = os.path.join(self.datadir, self.hpa10m_data.loc[idx]["tar_filename"])
         
         use_tar = True
         if use_tar:
@@ -413,7 +412,7 @@ class HPADatasetMIL(HPADatasetBase):
 
 class HPADatasetDownsample(HPADatasetBase):
     def __init__(self,
-                hpa11m_data,
+                hpa10m_data,
                 datadir,
                 data_split="train",
                 target_size=224,
@@ -422,7 +421,7 @@ class HPADatasetDownsample(HPADatasetBase):
                 cache_dir=None,
                 num_workers=4
                 ):
-        super().__init__(hpa11m_data, datadir, data_split, processor, cache_dir, num_workers)
+        super().__init__(hpa10m_data, datadir, data_split, processor, cache_dir, num_workers)
         self.target_size = target_size
         self.n_crop = n_crop
 
@@ -434,9 +433,9 @@ class HPADatasetDownsample(HPADatasetBase):
             raise ValueError("Processor is not provided.")
 
     def __getitem__(self, idx):
-        name = self.hpa11m_data.loc[idx]["name"]
-        tissue_folder = self.hpa11m_data.loc[idx]["tissue_folder"]
-        tar_filename = os.path.join(self.datadir, self.hpa11m_data.loc[idx]["tar_filename"])
+        name = self.hpa10m_data.loc[idx]["name"]
+        tissue_folder = self.hpa10m_data.loc[idx]["tissue_folder"]
+        tar_filename = os.path.join(self.datadir, self.hpa10m_data.loc[idx]["tar_filename"])
         
         use_tar = False
         if use_tar:
@@ -847,7 +846,7 @@ class HPADatasetMIL_url(Dataset):
             cell_type_one_hot
         ) = self.get_text_input_output(custom_metadata, tissue_folder, cell_type)
 
-        # Return same format as your original code:
+        # return format:
         return (
             processed_image,
             custom_metadata,
@@ -1024,7 +1023,7 @@ class HPADatasetMIL_url(Dataset):
 
     def get_text_input_output(self, annotation, tissue_folder, cell_type):
         """
-        Same method from your original code, used to build queries, caption,
+        Builds queries, caption,
         and multi-hot vectors for intensities, location, quantity, malignancy, tissue, and cell type.
         """
         intensity_map = {

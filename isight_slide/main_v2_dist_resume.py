@@ -52,8 +52,7 @@ criterion_tissue = nn.CrossEntropyLoss()     # For tissue type (58 classes)
 criterion_malignancy = nn.CrossEntropyLoss() # For tumor vs non-tumor (binary)
 
 # ---------------------------------------------------------------- data locations
-# HPA10M metadata and RLE tissue masks. Set these to your own copies; the defaults are the
-# paths used for the published run and will not exist elsewhere.
+# HPA10M metadata and RLE tissue masks (environment variables; see README).
 DATA_ROOT = os.environ.get("ISIGHT_DATA_ROOT", "")
 DATA_TRAIN_META = os.environ.get("ISIGHT_TRAIN_META",
                                  os.path.join(DATA_ROOT, "remaining_training_metadata.feather"))
@@ -64,8 +63,7 @@ DATA_RLE_DIR = os.environ.get("ISIGHT_RLE_DIR", os.path.join(DATA_ROOT, "rle_mas
 DATA_IMAGE_DIR = os.environ.get("ISIGHT_IMAGE_DIR", os.path.join(DATA_ROOT, "hpa10m"))
 DATA_RLE_INDEX = os.environ.get("ISIGHT_RLE_INDEX",
                                 os.path.join(DATA_ROOT, "rle_mask_index.json"))
-# Step ReduceLROnPlateau once per epoch (conventional) instead of once per batch (what the
-# published run did). Off by default so the released config reproduces the paper.
+# Step ReduceLROnPlateau once per epoch instead of once per batch (default: per batch).
 SCHEDULER_PER_EPOCH = os.environ.get("SCHEDULER_PER_EPOCH", "0") == "1"
 
 
@@ -216,47 +214,42 @@ def train(config):
     # Modify the dataset creation
 
     # # use 2000 validation for training validation
-    # validation_set = hpa11m_index[hpa11m_index['split'] == 'validation']
-    # hpa11m_test = validation_set.sample(n=2000, random_state=42)
-    # remaining_validation = validation_set.drop(hpa11m_test.index).reset_index(drop=True)
+    # validation_set = hpa10m_index[hpa10m_index['split'] == 'validation']
+    # hpa10m_test = validation_set.sample(n=2000, random_state=42)
+    # remaining_validation = validation_set.drop(hpa10m_test.index).reset_index(drop=True)
 
     # # add the rest of val to the training set
-    # hpa11m_train = pd.concat([hpa11m_index[hpa11m_index['split'] == 'train'], remaining_validation]).reset_index(drop=True)
-    # hpa11m_test = hpa11m_test.reset_index(drop=True)
+    # hpa10m_train = pd.concat([hpa10m_index[hpa10m_index['split'] == 'train'], remaining_validation]).reset_index(drop=True)
+    # hpa10m_test = hpa10m_test.reset_index(drop=True)
 
-    # Data locations come from the environment (or config.ini) rather than being hard-coded
-    # to one cluster. See README for what each file is and how to obtain it.
-    hpa11m_train = pd.read_feather(DATA_TRAIN_META)
-    hpa11m_test = pd.read_feather(DATA_TEST_META)
-    overlap = pd.merge(hpa11m_train, hpa11m_test, on="name")
+    # data locations: environment variables, see README
+    hpa10m_train = pd.read_feather(DATA_TRAIN_META)
+    hpa10m_test = pd.read_feather(DATA_TEST_META)
+    overlap = pd.merge(hpa10m_train, hpa10m_test, on="name")
     if rank == 0:
         print(f"Overlap: {len(overlap)} (suppose to be 0)")
-    # hpa11m_train = hpa11m_train[~hpa11m_train['url'].isin(overlap['url'])]
+    # hpa10m_train = hpa10m_train[~hpa10m_train['url'].isin(overlap['url'])]
 
     if config.use_cell_type != "All":
-        hpa11m_train = hpa11m_train.loc[hpa11m_train["cell_type"] == config.use_cell_type, ].reset_index(drop=True)
+        hpa10m_train = hpa10m_train.loc[hpa10m_train["cell_type"] == config.use_cell_type, ].reset_index(drop=True)
         # split 95% into train, 5% into validation
-        hpa11m_train, hpa11m_test = train_test_split(hpa11m_train, test_size=0.01, random_state=42)
-        hpa11m_train = hpa11m_train.reset_index(drop=True)
-        hpa11m_test = hpa11m_test.reset_index(drop=True)
+        hpa10m_train, hpa10m_test = train_test_split(hpa10m_train, test_size=0.01, random_state=42)
+        hpa10m_train = hpa10m_train.reset_index(drop=True)
+        hpa10m_test = hpa10m_test.reset_index(drop=True)
         if rank == 0:
-            print(f"Using {config.use_cell_type} only. Which subset to {len(hpa11m_train)} images.")
-    # unique_tissue_types = [val.lower().replace("cancer","").replace("tissue","").strip() for val in hpa11m_train["tissue"].unique()]
-    # unique_cell_types = [val for val in hpa11m_train["cell_type"].unique()]
+            print(f"Using {config.use_cell_type} only. Which subset to {len(hpa10m_train)} images.")
+    # unique_tissue_types = [val.lower().replace("cancer","").replace("tissue","").strip() for val in hpa10m_train["tissue"].unique()]
     
-    # `datadir` is only read by the `simple_downsample` model version. The line defining it
-    # was commented out in the original, so selecting that version raised NameError before
-    # training could start; the MIL versions the paper uses never touch it, which is why the
-    # published runs were unaffected. Defined here from the environment so both paths work.
+    # `datadir` is only read by the `simple_downsample` model version
     datadir = DATA_IMAGE_DIR
     hdf5_base_dir = DATA_RLE_DIR
     rle_map_path = DATA_RLE_INDEX
 
     if config.model_version == "simple_downsample":
-        dataset = HPADatasetDownsample(hpa11m_train, datadir, data_split="train", target_size=patch_size, processor=processor)
+        dataset = HPADatasetDownsample(hpa10m_train, datadir, data_split="train", target_size=patch_size, processor=processor)
     else:
-        # dataset = HPADatasetMIL(hpa11m_train, datadir, data_split="train", patch_size=patch_size, processor=processor)
-        dataset = HPADatasetMIL_url(hpa11m_train, rle_map_path, hdf5_base_dir, data_split="train", patch_size=patch_size, processor=processor)
+        # dataset = HPADatasetMIL(hpa10m_train, datadir, data_split="train", patch_size=patch_size, processor=processor)
+        dataset = HPADatasetMIL_url(hpa10m_train, rle_map_path, hdf5_base_dir, data_split="train", patch_size=patch_size, processor=processor)
 
     # Calculate the number of batches per GPU
     num_gpus = torch.distributed.get_world_size() if config.distributed else 1
@@ -269,9 +262,9 @@ def train(config):
 
     # Create test dataset and dataloader
     if config.model_version == "simple_downsample":
-        test_dataset = HPADatasetDownsample(hpa11m_test, datadir, data_split="test", target_size=patch_size, processor=processor)
+        test_dataset = HPADatasetDownsample(hpa10m_test, datadir, data_split="test", target_size=patch_size, processor=processor)
     else:
-        test_dataset = HPADatasetMIL_url(hpa11m_test, rle_map_path, hdf5_base_dir, data_split="test", patch_size=patch_size, processor=processor)
+        test_dataset = HPADatasetMIL_url(hpa10m_test, rle_map_path, hdf5_base_dir, data_split="test", patch_size=patch_size, processor=processor)
     
     if config.distributed:
         test_sampler = torch.utils.data.distributed.DistributedSampler(test_dataset, shuffle=False)
@@ -397,16 +390,8 @@ def train(config):
                 total_loss.backward()
                 optimizer.step()
 
-            # SCHEDULER. The original stepped ReduceLROnPlateau here, once per BATCH, on
-            # `total_loss.item()` -- the loss of THIS rank only. Two problems under DDP:
-            # ReduceLROnPlateau is designed to be stepped once per epoch on a held-out
-            # metric, and an unreduced per-rank loss lets different ranks cut the learning
-            # rate at different steps, so the optimisers drift apart.
-            #
-            # The loss is now all-reduced so every rank sees the same number and steps
-            # together. Stepping cadence is unchanged (still per batch, patience=500
-            # batches) so the published run is reproduced exactly; set
-            # SCHEDULER_PER_EPOCH=1 to use the conventional per-epoch schedule instead.
+            # LR scheduler: step on the loss averaged across ranks so all ranks step together;
+            # per batch by default, per epoch with SCHEDULER_PER_EPOCH=1.
             _sched_loss = total_loss.detach()
             if config.distributed:
                 torch.distributed.all_reduce(_sched_loss, op=torch.distributed.ReduceOp.SUM)
@@ -780,7 +765,7 @@ def parse_config():
     # Initialize wandb with config and run name
     if not converted_config['distributed'] or converted_config['local_rank'] == 0:
         wandb.init(
-            project="HPA-VLM",
+            project=os.environ.get("WANDB_PROJECT", "isight-slide"),
             config=converted_config,
             name=run_name
         )
