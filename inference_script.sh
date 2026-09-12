@@ -1,9 +1,9 @@
 #!/bin/bash
 # Image-level inference with iSight-slide on the validation set.
-# Checkpoint: https://huggingface.co/zhihuanglab/iSight-slide  (checkpoints/iSight_model_checkpoint.pth)
+# Checkpoint: https://huggingface.co/zhihuanglab/iSight-slide  (checkpoints/iSight-slide.pth)
 set -euo pipefail
 export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
-CHECKPOINT_PATH=${CHECKPOINT_PATH:-checkpoints/iSight_model_checkpoint.pth}
+CHECKPOINT_PATH=${CHECKPOINT_PATH:-checkpoints/iSight-slide.pth}
 CONFIG_FILE=isight_slide/config/config.ini
 INFERENCE_DATA=validation_data/validation_metadata.csv
 HDF5_BASE_DIR=validation_data/rle_masks

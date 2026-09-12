@@ -9,7 +9,7 @@ DDP launch (3 GPUs):
         --crops_h5 $DATA/crops_target.h5 \
         --uni2_ckpt $UNI2_CKPT_PATH \
         --epochs 10 --bs_per_gpu 256 --backbone_lr 1e-5 --head_lr 1e-3 \
-        --out_dir $RUNS/target_cell_43cls
+        --out_dir $RUNS/isight_target
 
 Per-cell schema in crops_target.h5:
     crops: (N, 64, 64, 3) uint8 RGB

@@ -55,9 +55,9 @@ Checkpoints:
 
 ```python
 from huggingface_hub import hf_hub_download
-slide  = hf_hub_download("zhihuanglab/iSight-slide",  "checkpoints/iSight_model_checkpoint.pth")
-cell   = hf_hub_download("zhihuanglab/iSight-cell",   "checkpoints/staining_model_ep09.pt")
-target = hf_hub_download("zhihuanglab/iSight-target", "checkpoints/target_cell_43cls.pt")
+slide  = hf_hub_download("zhihuanglab/iSight-slide",  "checkpoints/iSight-slide.pth")
+cell   = hf_hub_download("zhihuanglab/iSight-cell",   "checkpoints/iSight-cell.pt")
+target = hf_hub_download("zhihuanglab/iSight-target", "checkpoints/iSight-target.pt")
 ```
 
 ---
@@ -91,7 +91,7 @@ isight_slide/
 **Inference** on the validation set:
 
 ```bash
-CHECKPOINT_PATH=/path/to/iSight_model_checkpoint.pth bash inference_script.sh
+CHECKPOINT_PATH=/path/to/iSight-slide.pth bash inference_script.sh
 ```
 
 **Expected run time**: on a standard GPU each image is processed within a few seconds.

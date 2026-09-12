@@ -9,7 +9,7 @@ For each all_cells/{flat}.h5: forward its crops through the backbone -> feat(153
 image's class head -> p_target = softmax(feat @ W[c] + b[c])[1]. Keep p > P_THR, sample
 N_TARGET, write target_cells/{flat}.h5 (crops + geometry + p_target + labels). GPU; sharded.
 
-Set $CKPT to the target-cell checkpoint (`target_cell_43cls`, val mean F1 0.9954 at ep4) --
+Set $CKPT to the iSight-target checkpoint --
 this is the selector behind the released staining model and everything downstream of it.
 
 crops are RGB uint8 (crop_all_master does BGR->RGB), matching training (extract_target_crops
