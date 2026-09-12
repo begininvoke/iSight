@@ -127,8 +127,7 @@ Cells are segmented with Cellpose-SAM. **iSight-target**, a UNI2-h backbone with
 head per class in `isight_cell/meta/classes_43.csv` (43 tissue × cell-type classes), selects
 the cells of interest for the image's class. **iSight-cell**, a UNI2-h backbone fully
 fine-tuned with two heads, then predicts staining intensity (4) and subcellular location (4)
-for each selected cell. Training is weakly supervised from image-level HPA labels in two
-steps, with a self-agreement filter in between.
+for each selected cell.
 
 ```
 isight_cell/code/
@@ -174,6 +173,8 @@ per-image cell cap).
 
 `validation_data/` holds the 2,000-image validation set: images, RLE tissue masks
 (`rle_masks/validation_masks.h5` + `rle_mask_index.json`) and `validation_metadata.csv`.
+The files are stored with Git LFS; install [git-lfs](https://git-lfs.com) before cloning, or run
+`git lfs pull` in an existing clone.
 
 ## 📄 License
 
