@@ -48,7 +48,7 @@ LABEL_OVERRIDE = os.environ.get("LABEL_CSV", "")
 
 REFINE_DIR = os.environ.get("REFINE_DIR", "")   # Round-2: train from refined (agreeing) cells; val/test stay original
 BALANCE = int(os.environ.get("BALANCE_INTENSITY", "0"))  # oversample train to ~balance the 4 intensity classes
-# --- early stopping (paper protocol): val macro-F1, min_delta 0.1%, patience 2, keep-current ---
+# --- early stopping ---
 EARLY_STOP = int(os.environ.get("EARLY_STOP", "1"))              # 0 disables, run the full budget
 ES_METRIC = os.environ.get("ES_METRIC", "val_cell_avg_f1")       # validation macro-F1
 ES_MIN_DELTA = float(os.environ.get("ES_MIN_DELTA", "0.001"))
@@ -248,7 +248,7 @@ def main():
                 best = cell["avg_f1"]
                 torch.save({"model": core.state_dict(), "ep": ep, "val_avg_f1": best}, RUN / "best_model.pt")
                 print(f"  -> saved best (val avg_f1={best:.4f})", flush=True)
-        # --- early stopping: validation macro-F1, min_delta 0.1%, patience 2, keep-current ---
+        # --- early stopping ---
         stop = torch.zeros(1, device=device)
         if is_main and EARLY_STOP:
             if es.update(rec[ES_METRIC]): stop[0] = 1
@@ -257,10 +257,10 @@ def main():
             torch.distributed.barrier()
             torch.distributed.broadcast(stop, src=0)
         if stop.item():
-            sel_ep = ep                                   # keep-current: THIS epoch is the model
+            sel_ep = ep                                   # the stopping epoch is the model
             if is_main:
                 torch.save({"model": core.state_dict(), "ep": ep, ES_METRIC: rec[ES_METRIC]}, RUN / "selected_model.pt")
-                print(f"  -> early stop at ep{ep:02d}; selected_model.pt = ep{ep:02d} (keep-current, NOT best-so-far)", flush=True)
+                print(f"  -> early stop at ep{ep:02d}; selected_model.pt = ep{ep:02d}", flush=True)
             break
     # final test on best (all ranks load best + participate)
     if ddp: torch.distributed.barrier()

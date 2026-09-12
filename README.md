@@ -17,68 +17,28 @@ A deep learning-based multi-task prediction system for automated analysis of imm
 
 *Source: Human Protein Atlas database ([v23.proteinatlas.org](http://v23.proteinatlas.org/ENSG00000170312-CDK1/))*
 
+## 🧩 Two complementary models
+
+iSight reads an IHC image at two levels.
+
+- **iSight-slide** looks at the whole image and returns one assessment per image: staining
+  intensity, subcellular location, stained fraction, tissue type and malignancy. It needs no
+  cell segmentation and covers every marker in the training corpus.
+- **iSight-cell** works cell by cell: every cell is segmented, **iSight-target** picks out the
+  cells of interest for that tissue (tumour cells in a carcinoma, hepatocytes in liver, and
+  so on), and iSight-cell then scores each of them for staining intensity and location. The
+  image-level result is built up from the cells, so it comes with a cell count, a spatial map
+  and a stained fraction that is measured rather than estimated. iSight-cell requires
+  iSight-target.
+
 ## 🔗 Links
 
 | Resource | Link |
 |----------|------|
 | **Training dataset** | [nirschl-lab/hpa10m](https://huggingface.co/datasets/nirschl-lab/hpa10m) |
-| **iSight-slide** (checkpoint + code) | [zhihuanglab/iSight-slide](https://huggingface.co/zhihuanglab/iSight-slide) |
-| **iSight-cell** (staining model) | [zhihuanglab/iSight-cell](https://huggingface.co/zhihuanglab/iSight-cell) |
-| **iSight-target** (target-cell classifier) | [zhihuanglab/iSight-target](https://huggingface.co/zhihuanglab/iSight-target) |
-
-## 📁 Layout
-
-```
-isight_slide/
-  model/patch_encoder_with_clam.py   CLIP encoder, all-token gated attention,
-                                     text (context) branch, cell-type conditioning,
-                                     5 multi-task heads
-  dataset/hpadataset.py              HPA10M MIL dataset, tissue-mask patching
-  main_v2_dist_resume.py             DDP training with resume
-  config/config.ini                  the released configuration
-  scripts/inference.py               image-level inference
-  scripts/infer_rs200_text.py        reader-study inference
-
-isight_cell/code/
-  pipeline/                          weakly supervised training, self-refinement,
-                                     cell-level staining prediction, evaluation
-  pipeline/earlystop.py              val macro-F1 early stopping (min_delta, patience,
-                                     keep-current) used to select the released epoch
-  target_cell/extract_target_crops.py  crops for the 43 target classes
-  target_cell/train_target_head.py     43 binary target-cell heads on UNI2-h
-  deps/                              model class and UNI2-h backbone
-  tissue.py                          tissue mask
-isight_cell/meta/classes_43.csv      the 43 target classes (tissue x cell-type)
-
-validation_data/                     2,000-image validation set (images, RLE masks, metadata)
-```
-
-## 🧠 Models
-
-**iSight-slide.** CLIP ViT-L/14-336 patch encoder over all 336 px tissue patches of an image.
-Every patch contributes all 576 of its ViT tokens; a gated attention module scores each token
-position and softmaxes **across patches** at that position, so pooling is per-token rather than
-per-patch. The pooled representation is the mean over tokens. Two conditioning signals are
-added to it: a text (context) branch encoding the query (tissue, diagnosis and gene), applied
-with dropout during training, and a cell-type embedding. Five linear heads predict:
-
-| Task | Classes | Labels |
-|------|---------|--------|
-| **Staining intensity** | 4 | negative, weak, moderate, strong |
-| **Staining location** | 4 | none, cytoplasmic/membranous, nuclear, cytoplasmic/membranous,nuclear |
-| **Staining quantity** | 4 | none, <25%, 25%-75%, >75% |
-| **Tissue type** | 58 | human tissue types |
-| **Malignancy** | 2 | normal, cancer |
-
-**iSight-cell.** Cellpose-SAM segmentation, then a target-cell classifier selects the cells of
-interest, then a UNI2-h backbone fully fine-tuned with dual heads for per-cell staining
-intensity (4) and subcellular location (4). Training is weakly supervised from image-level HPA
-labels, with a self-refinement round.
-
-The target-cell classifier has one binary head per class in `isight_cell/meta/classes_43.csv`,
-43 tissue × cell-type classes. That table is the single definition of the class space: crop
-extraction applies it, so `class_idx` is written in the 0..42 space, and the trainer and the
-selector both use it directly with no run-time conversion.
+| **iSight-slide** checkpoint | [zhihuanglab/iSight-slide](https://huggingface.co/zhihuanglab/iSight-slide) |
+| **iSight-cell** checkpoint | [zhihuanglab/iSight-cell](https://huggingface.co/zhihuanglab/iSight-cell) |
+| **iSight-target** checkpoint | [zhihuanglab/iSight-target](https://huggingface.co/zhihuanglab/iSight-target) |
 
 ## 🚀 Setup
 
@@ -91,14 +51,42 @@ conda create -n isight python=3.10 -y && conda activate isight
 pip install -r requirements.txt
 ```
 
-Checkpoint:
+Checkpoints:
 
 ```python
 from huggingface_hub import hf_hub_download
-ckpt = hf_hub_download("zhihuanglab/iSight-slide", "checkpoints/iSight_model_checkpoint.pth")
+slide  = hf_hub_download("zhihuanglab/iSight-slide",  "checkpoints/iSight_model_checkpoint.pth")
+cell   = hf_hub_download("zhihuanglab/iSight-cell",   "checkpoints/staining_model_ep09.pt")
+target = hf_hub_download("zhihuanglab/iSight-target", "checkpoints/target_cell_43cls.pt")
 ```
 
-## ▶️ Running iSight-slide
+---
+
+## 🔬 iSight-slide
+
+CLIP ViT-L/14-336 patch encoder over all 336 px tissue patches of an image. Every patch
+contributes all 576 of its ViT tokens; a gated attention module scores each token position and
+softmaxes **across patches** at that position, so pooling is per token rather than per patch.
+The pooled representation is the mean over tokens. Two conditioning signals are added to it: a
+text (context) branch encoding the query (tissue, diagnosis and gene), applied with dropout
+during training, and a cell-type embedding. Five linear heads predict:
+
+| Task | Classes | Labels |
+|------|---------|--------|
+| **Staining intensity** | 4 | negative, weak, moderate, strong |
+| **Staining location** | 4 | none, cytoplasmic/membranous, nuclear, cytoplasmic/membranous,nuclear |
+| **Staining quantity** | 4 | none, <25%, 25%-75%, >75% |
+| **Tissue type** | 58 | human tissue types |
+| **Malignancy** | 2 | normal, cancer |
+
+```
+isight_slide/
+  model/patch_encoder_with_clam.py   encoder, all-token gated attention, conditioning, heads
+  dataset/hpadataset.py              HPA10M MIL dataset, tissue-mask patching
+  train.py                           training (DDP, resumable)
+  config/config.ini                  the released configuration (batch_size 1, lr 1e-6, 10 epochs)
+  scripts/inference.py               image-level inference
+```
 
 **Inference** on the validation set:
 
@@ -120,10 +108,8 @@ Outputs in `results/`:
 
 ```bash
 export ISIGHT_DATA_ROOT=/path/to/hpa10m          # metadata, RLE masks, images
-cd isight_slide && python main_v2_dist_resume.py --config config/config.ini
+cd isight_slide && python train.py --config config/config.ini
 ```
-
-Data locations are environment variables, not hard-coded paths:
 
 | variable | what |
 |---|---|
@@ -133,40 +119,61 @@ Data locations are environment variables, not hard-coded paths:
 | `ISIGHT_IMAGE_DIR` | images, only for the `simple_downsample` version |
 | `SCHEDULER_PER_EPOCH=1` | step the LR scheduler per epoch instead of per batch |
 
-The released configuration uses `batch_size = 1`, which is what the checkpoint was trained with.
+---
 
-## ▶️ iSight-cell pipeline, in run order
+## 🧫 iSight-cell (with iSight-target)
+
+Cells are segmented with Cellpose-SAM. **iSight-target**, a UNI2-h backbone with one binary
+head per class in `isight_cell/meta/classes_43.csv` (43 tissue × cell-type classes), selects
+the cells of interest for the image's class. **iSight-cell**, a UNI2-h backbone fully
+fine-tuned with two heads, then predicts staining intensity (4) and subcellular location (4)
+for each selected cell. Training is weakly supervised from image-level HPA labels in two
+steps, with a self-agreement filter in between.
+
+```
+isight_cell/code/
+  target_cell/extract_target_crops.py  crops for the 43 target classes
+  target_cell/train_target_head.py     iSight-target: 43 binary heads on UNI2-h
+  pipeline/                            iSight-cell: training, self-refinement, prediction, evaluation
+  pipeline/earlystop.py                early stopping
+  deps/                                model class and UNI2-h backbone
+  tissue.py                            tissue mask
+isight_cell/meta/classes_43.csv        the 43 target classes; the single definition of the
+                                       class space, used by extraction, training and selection
+```
+
+**Pipeline, in run order**
 
 | # | script | what it does |
 |---|---|---|
-| 1 | `pipeline/tissue_mask_gen.py` | tissue mask per image (`tissue.py` holds the pixel rule) |
-| 2 | `target_cell/extract_target_crops.py` | 64x64 crops for the 43 target classes; writes `class_idx` as 0..42 |
-| 3 | `target_cell/train_target_head.py` | fine-tunes UNI2-h with 43 binary target-cell heads |
-| 4 | `pipeline/select_target_v2.py` | applies that classifier per image, keeps the target cells |
-| 5 | `pipeline/train_foundation.py` | staining model, step 1: broadcast image labels onto cells |
+| 1 | `pipeline/tissue_mask_gen.py` | tissue mask per image |
+| 2 | `target_cell/extract_target_crops.py` | 64×64 crops for the 43 target classes |
+| 3 | `target_cell/train_target_head.py` | trains iSight-target |
+| 4 | `pipeline/select_target_v2.py` | applies iSight-target per image, keeps the target cells |
+| 5 | `pipeline/train_foundation.py` | iSight-cell, step 1: image labels broadcast onto cells |
 | 6 | `pipeline/predict_all_target.py` | scores every cell with the step-1 model |
 | 7 | `pipeline/refine_target.py` | keeps cells whose prediction agrees with the image label on both heads |
 | 8 | `pipeline/scan_refined.py` | per-cell index over the refined pool (`$SCAN_NPZ` for step 2) |
-| 9 | `pipeline/train_shards_resample.py` | staining model, step 2: balanced resampling; **this produced the released checkpoint** |
+| 9 | `pipeline/train_shards_resample.py` | iSight-cell, step 2: balanced resampling over the refined cells |
 
 Evaluation: `pipeline/val_richeval.py` (validation, image-level accuracy and QWK),
 `pipeline/eval_test500k_fixedloc.py` (held-out 500K set), `pipeline/eval_flats_fixed.py`
-(any image list, same fixed aggregation), `pipeline/agg_uncap.py` (image-level metrics with no
-per-image cell cap). Segmentation upstream of step 1 is Cellpose-SAM at its released settings.
+(any image list, same aggregation), `pipeline/agg_uncap.py` (image-level metrics with no
+per-image cell cap).
 
 | variable | what |
 |---|---|
 | `ISIGHT_ROOT` | project root for the iSight-cell scripts |
 | `UNI2_CKPT_PATH` | UNI2-h weights ([MahmoodLab/UNI2-h](https://huggingface.co/MahmoodLab/UNI2-h)) |
-| `EARLY_STOP` / `ES_METRIC` / `ES_MIN_DELTA` / `ES_PATIENCE` | early stopping; defaults are the released settings (on, `val_cell_avg_f1`, 0.001, 2) |
+| `CKPT` | iSight-target checkpoint for `select_target_v2.py`; iSight-cell checkpoint for `predict_all_target.py` |
+| `EARLY_STOP` / `ES_METRIC` / `ES_MIN_DELTA` / `ES_PATIENCE` | early stopping (on by default) |
 
-## 📦 Checkpoints
+---
 
-| model | config | note |
-|---|---|---|
-| iSight-slide | `isight_slide/config/config.ini` — `v3_all_tokens`, batch_size 1, lr 1e-6, 10 epochs | [zhihuanglab/iSight-slide](https://huggingface.co/zhihuanglab/iSight-slide) |
-| iSight-cell — staining | step 2 (balanced resampling), lr 2e-5, **epoch 9** | early stopping on validation macro-F1 (min_delta 0.1%, patience 2, keep-current) |
-| iSight-cell — target selection | 43 binary heads, `isight_cell/meta/classes_43.csv` | val mean F1 0.9954 (ep4); pass it as `CKPT` |
+## 🗂 Validation data
+
+`validation_data/` holds the 2,000-image validation set: images, RLE tissue masks
+(`rle_masks/validation_masks.h5` + `rle_mask_index.json`) and `validation_metadata.csv`.
 
 ## 📄 License
 

@@ -1,16 +1,8 @@
-"""Early stopping on a validation metric: min_delta / patience / keep-current.
+"""Early stopping on a validation metric.
 
-The rule used to select the released staining model:
-
-    criterion   validation macro-F1  (mean of the per-cell intensity and location F1)
-    min_delta   0.001   (0.1%)
-    patience    2
-    semantics   keep-current
-
-**keep-current** means the epoch that exhausts the patience budget is the selected model,
-not the best-so-far (Keras' `restore_best_weights=False` convention).
-An epoch counts as an improvement only if it beats the running best by more than `min_delta`,
-so a marginal gain still increments the bad-epoch counter.
+An epoch counts as an improvement only if it beats the running best by more than `min_delta`;
+otherwise it increments the bad-epoch counter, and training stops once `patience` bad epochs
+accumulate. The epoch at which training stops is the selected model.
 """
 
 

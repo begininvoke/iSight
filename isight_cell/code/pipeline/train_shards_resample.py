@@ -35,7 +35,7 @@ NUM_WORKERS = int(os.environ.get("NUM_WORKERS", "8")); EVAL_BS = 2048
 SEED = int(os.environ.get("SEED", "0"))                       # varies resampling + model-init RNG (0 = legacy)
 RESUME = os.environ.get("RESUME", "")                        # path to ckpt_epNN.pt to continue from
 SAVE_EVERY_EPOCH = int(os.environ.get("SAVE_EVERY_EPOCH", "1"))  # write per-epoch full ckpt (model+opt+sched) for resume
-# --- early stopping (paper protocol): val macro-F1, min_delta 0.1%, patience 2, keep-current ---
+# --- early stopping ---
 EARLY_STOP = int(os.environ.get("EARLY_STOP", "1"))              # 0 disables, run the full budget
 ES_METRIC = os.environ.get("ES_METRIC", "val_cell_avg_f1")       # validation macro-F1
 ES_MIN_DELTA = float(os.environ.get("ES_MIN_DELTA", "0.001"))
@@ -202,7 +202,7 @@ def main():
                 torch.save({"model": core.state_dict(), "opt": opt.state_dict(), "sched": sched.state_dict(),
                             "ep": ep, "best": best, "val_avg_f1": cell["avg_f1"], "seed": SEED},
                            RUN / f"ckpt_ep{ep:02d}.pt")
-        # --- early stopping: validation macro-F1, min_delta 0.1%, patience 2, keep-current ---
+        # --- early stopping ---
         stop = torch.zeros(1, device=device)
         if is_main and EARLY_STOP:
             if es.update(rec[ES_METRIC]): stop[0] = 1
@@ -211,10 +211,10 @@ def main():
             torch.distributed.barrier()
             torch.distributed.broadcast(stop, src=0)
         if stop.item():
-            sel_ep = ep                                   # keep-current: THIS epoch is the model
+            sel_ep = ep                                   # the stopping epoch is the model
             if is_main:
                 torch.save({"model": core.state_dict(), "ep": ep, ES_METRIC: rec[ES_METRIC]}, RUN / "selected_model.pt")
-                print(f"  -> early stop at ep{ep:02d}; selected_model.pt = ep{ep:02d} (keep-current, NOT best-so-far)", flush=True)
+                print(f"  -> early stop at ep{ep:02d}; selected_model.pt = ep{ep:02d}", flush=True)
             break
     if ddp: torch.distributed.barrier()
     sel = RUN / "selected_model.pt"                       # written only if early stopping fired
